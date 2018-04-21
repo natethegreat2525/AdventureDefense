@@ -7,6 +7,65 @@ let downKey = keyboard(40);
 let leftMouseDown = false;
 let rightMouseDown = false;
 
+let crafting = [
+//picks
+	{
+		name: "WOOD PICK",
+		WOOD: 10,
+	},
+	{
+		name: "STONE PICK",
+		WOOD: 5,
+		STONE: 5,
+	},
+	{
+		name: "METAL PICK",
+		WOOD: 5,
+		METAL: 5,
+	},
+//axes
+	{
+		name: "WOOD AXE",
+		WOOD: 10,
+	},
+	{
+		name: "STONE AXE",
+		WOOD: 5,
+		STONE: 5,
+	},
+	{
+		name: "METAL AXE",
+		WOOD: 5,
+		METAL: 5,
+	}
+//towers
+/*
+	{
+		name: "",
+		WOOD: ,
+		STONE: ,
+		COAL: ,
+		METAL: ,
+		CRYSTAL: ,
+	},
+	{
+		name: "",
+		WOOD: ,
+		STONE: ,
+		COAL: ,
+		METAL: ,
+		CRYSTAL: ,
+	},
+	{
+		name: "",
+		WOOD: ,
+		STONE: ,
+		COAL: ,
+		METAL: ,
+		CRYSTAL: ,
+	},
+	*/
+];
 
 class Inventory {
 	constructor() {
@@ -20,8 +79,15 @@ class Inventory {
 		this.contents[val]++;
 	}
 	
-	has(val) {
-		return this.contents[val];
+	has(val, num) {
+		if (num === 0) {
+			return true;
+		}
+		
+		if (typeof num === 'undefined') {
+			num = 1;
+		}
+		return this.contents[val] >= num;
 	}
 	
 	use(val) {
@@ -35,8 +101,11 @@ class Inventory {
 		return true;
 	}
 	
-	render(cont, guiCont) {
-		guiCont.addChild(makeInventory(this.contents));
+	render(cont, guiCont, guiRef, player) {
+		if (guiRef) {
+			guiCont.addChild(makeInventory(this.contents));
+			guiCont.addChild(makeCrafting(this, player));
+		}
 	}
 	
 	update () {
@@ -62,17 +131,36 @@ class Player {
 		
 		this.stationary = false;
 		this.inventory = new Inventory()
-		this.inventory.add("WOOD");
-		this.inventory.add("WOOD");
-		this.inventory.add("WOOD");
-		this.inventory.add("STONE");
-		this.inventory.add("COAL");
-		this.inventory.use("WOOD");
+		for (let i = 0; i < 20; i++) {
+			this.inventory.add("WOOD");
+			this.inventory.add("STONE");
+			this.inventory.add("COAL");
+			this.inventory.add("CRYSTAL");
+			this.inventory.add("METAL");
+		}
+	
+		this.inventory.add("METAL PICK");
+		this.inventory.add("METAL AXE");
+
 	}
 	
-	render(cont, guiCont) {
+	render(cont, guiCont, guiRef) {
 		cont.addChild(makePlayer(this.x, this.y, this.dir, this.fr, this.cooldown/30));
-		this.inventory.render(cont, guiCont);
+		this.inventory.render(cont, guiCont, guiRef, this);
+	}
+	
+	onCraft(value) {
+		let recipe = crafting[value];
+		if (canCraft(this.inventory, recipe)) {
+			for (let p in recipe) {
+				if (p === "name")
+					continue;
+				for (let i = 0; i < recipe[p]; i++) {
+					this.inventory.use(p);
+				}
+			}
+			this.inventory.add(recipe.name);
+		}
 	}
 	
 	update(delta) {
@@ -362,6 +450,7 @@ class World {
 		this.width = width;
 		this.height = height;
 		this.map = [];
+		this.guiRefresh = 0;
 		for (let i = 0; i < width; i++) {
 			this.map.push([]);
 			for (let j = 0; j < height; j++) {
@@ -409,7 +498,7 @@ class World {
 		this.player.cooldown = 30;
 		
 		let hits = 1;
-		let wAxe = this.player.inventory.has("WOODEN AXE");
+		let wAxe = this.player.inventory.has("WOOD AXE");
 		let sAxe = this.player.inventory.has("STONE AXE");
 		let mAxe = this.player.inventory.has("METAL AXE");
 		if (wAxe) {
@@ -434,8 +523,8 @@ class World {
 		}
 		this.player.cooldown = 30;
 		
-		let hits = 8;
-		let wPick = this.player.inventory.has("WOODEN PICK");
+		let hits = 1;
+		let wPick = this.player.inventory.has("WOOD PICK");
 		let sPick = this.player.inventory.has("STONE PICK");
 		let mPick = this.player.inventory.has("METAL PICK");
 		if (wPick) {
@@ -511,13 +600,21 @@ class World {
 	renderEntities(stage) {
 		if (this.entityCont) {
 			stage.removeChild(this.entityCont);
+			this.entityCont.destroy();
 		}
-		if (this.guiCont) {
-			stage.removeChild(this.guiCont);
+		this.guiRefresh += 1;
+		let guiRef = false;
+		if (this.guiRefresh > 30) {
+			guiRef = true;
+			this.guiRefresh = 0;
+			if (this.guiCont) {
+				stage.removeChild(this.guiCont)
+				this.guiCont.destroy({texture: true, baseTexture:true});
+			}
+			this.guiCont = new PIXI.Container();
 		}
 		
 		this.entityCont = new PIXI.Container();
-		this.guiCont = new PIXI.Container();
 		
 		//TODO sort entities by dist
 		this.entities.sort((a, b) => {
@@ -530,10 +627,12 @@ class World {
 			return 0;
 		});
 		for (let i = 0; i < this.entities.length; i++) {
-			this.entities[i].render(this.entityCont, this.guiCont);
+			this.entities[i].render(this.entityCont, this.guiCont, guiRef);
 		}
-		stage.addChild(this.entityCont);
-		stage.addChild(this.guiCont);
+		stage.addChildAt(this.entityCont, 1);
+		if (guiRef) {
+			stage.addChildAt(this.guiCont, 2);
+		}
 	}
 	
 	updateGroundCont(stage) {
@@ -548,7 +647,7 @@ class World {
 				this.groundCont.addChild(makeTile(this.map[i][j], i * 32, j * 32))
 			}
 		}
-		stage.addChild(this.groundCont);
+		stage.addChildAt(this.groundCont, 0);
 	}
 }
 
@@ -574,7 +673,6 @@ app.renderer.autoResize = true;
 //app.renderer.resize(512, 512);
 
 let mousePos = app.renderer.plugins.interaction.mouse.global;
-console.log(app.renderer.plugins.interaction)
 //app.renderer.view.style.position = "absolute";
 //app.renderer.view.style.display = "block";
 //app.renderer.autoResize = true;
@@ -649,6 +747,12 @@ function makeInventory(cont) {
 	});
 	let cnt = 0;
 	for (let prop in cont) {
+		cnt++;
+	}
+	let bg = makeRect(160, 20*cnt, 0x222222, 0, 0);
+	cnt = 0;
+	c.addChild(bg);
+	for (let prop in cont) {
 		let txt = new PIXI.Text(prop + ": " + cont[prop], style);
 		txt.x = 5;
 		txt.y = cnt * 20;
@@ -656,6 +760,64 @@ function makeInventory(cont) {
 		cnt++;
 	}
 	return c;
+}
+
+function makeCrafting(cont, player) {
+	let c = new PIXI.Container();
+	let style = new PIXI.TextStyle({
+		fontSize: 15,
+		fontWeight: "bold",
+		fill: "#dddddd"
+	});
+	let titleStyle = new PIXI.TextStyle({
+		fontSize: 20,
+		fontWeight: "bold",
+		fill: "#ffffff"
+	});
+	let cnt = 0;
+	for (let i in crafting) {
+		let r = crafting[i];
+		if (!canCraft(cont, r) || cont.has(r.name)) {
+			continue;
+		}
+		cnt++;
+	}
+	let bg = makeRect(130, 15*cnt + 25, 0x222222, 0, 0);
+	cnt = 0;
+	c.addChild(bg);
+	let title = new PIXI.Text("CRAFTING", titleStyle);
+	title.x = 5;
+	title.y = 0;
+	c.addChild(title);
+	for (let i in crafting) {
+		let r = crafting[i];
+		if (!canCraft(cont, r) || cont.has(r.name)) {
+			continue;
+		}
+		let txt = new PIXI.Text(r.name, style);
+		txt.interactive = true;
+		txt.buttonMode = true;
+		txt.on("pointerdown", () => {player.onCraft(i)});
+		txt.x = 5;
+		txt.y = cnt * 15 + 25;
+		c.addChild(txt);
+		cnt++;
+	}
+	c.y = 300;
+	return c;
+}
+
+function canCraft(cont, recipe) {
+	let w = recipe.WOOD || 0;
+	let s = recipe.STONE || 0;
+	let co = recipe.COAL || 0;
+	let cr = recipe.CRYSTAL || 0;
+	let m = recipe.METAL || 0;
+
+	if (cont.has("WOOD", w) && cont.has("STONE", s) && cont.has("COAL", co) && cont.has("CRYSTAL", cr) && cont.has("METAL", m)) {
+		return true;
+	}
+	return false;
 }
 
 function makeTree(x, y, health) {

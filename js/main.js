@@ -37,34 +37,33 @@ let crafting = [
 		name: "METAL AXE",
 		WOOD: 5,
 		METAL: 5,
-	}
+	},
 //towers
-/*
+
 	{
-		name: "",
-		WOOD: ,
-		STONE: ,
-		COAL: ,
-		METAL: ,
-		CRYSTAL: ,
+		name: "WOOD GUN",
+		WOOD: 5,
 	},
 	{
-		name: "",
-		WOOD: ,
-		STONE: ,
-		COAL: ,
-		METAL: ,
-		CRYSTAL: ,
+		name: "STONE GUN",
+		STONE: 5,
 	},
 	{
-		name: "",
-		WOOD: ,
-		STONE: ,
-		COAL: ,
-		METAL: ,
-		CRYSTAL: ,
+		name: "METAL GUN",
+		METAL: 5,
 	},
-	*/
+	{
+		name: "FIRE GUN",
+		WOOD: 5,
+		COAL: 5,
+		METAL: 5,
+	},
+	{
+		name: "LASER GUN",
+		COAL: 5,
+		METAL: 5,
+		CRYSTAL: 5,
+	},
 ];
 
 class Inventory {
@@ -128,6 +127,7 @@ class Player {
 			h: 6
 		};
 		this.cooldown = 0;
+		this.craftingVal = null;
 		
 		this.stationary = false;
 		this.inventory = new Inventory()
@@ -152,18 +152,11 @@ class Player {
 	onCraft(value) {
 		let recipe = crafting[value];
 		if (canCraft(this.inventory, recipe)) {
-			for (let p in recipe) {
-				if (p === "name")
-					continue;
-				for (let i = 0; i < recipe[p]; i++) {
-					this.inventory.use(p);
-				}
-			}
-			this.inventory.add(recipe.name);
+			this.craftingVal = value;
 		}
 	}
 	
-	update(delta) {
+	update(delta, world) {
 		this.cooldown -= delta;
 		this.cooldown = Math.max(this.cooldown, 0);
 		let mv = false;
@@ -202,6 +195,41 @@ class Player {
 		} else {
 			this.fr = 0;
 		}
+		
+		if (this.craftingVal !== null) {
+			let dontCraft = false;
+			let isGun = false;
+			if (this.craftingVal >= 6) {
+				isGun = true;
+				//gun so check for grass
+				let x = Math.floor(this.x / 32);
+				let y = Math.floor(this.y / 32);
+				if (world.map[x][y] !== 0) {
+					dontCraft = true;
+				} else {
+					world.map[x][y] = 3;
+				}
+			}
+			if (!dontCraft) {
+				let recipe = crafting[this.craftingVal];
+				for (let p in recipe) {
+					if (p === "name")
+						continue;
+					for (let i = 0; i < recipe[p]; i++) {
+						this.inventory.use(p);
+					}
+				}
+				if (isGun) {
+					let x = Math.floor(this.x / 32) * 32 + 16;
+					let y = Math.floor(this.y / 32) * 32 + 16;
+					world.entities.push(new Gun(x, y, this.craftingVal - 6));
+				} else {
+					this.inventory.add(recipe.name);
+				}
+			}
+			
+			this.craftingVal = null;
+		}
 	}
 }
 
@@ -218,6 +246,7 @@ class Enemy {
 	constructor(x, y, type) {
 		let params = enemyParams[type];
 		this.health = params[0];
+		this.maxHealth = params[0];
 		this.col = params[1];
 		this.sx = params[2];
 		this.sy = params[3];
@@ -240,7 +269,7 @@ class Enemy {
 	}
 	
 	render(cont) {
-		cont.addChild(makeEnemy(this.x, this.y, this.dir, this.fr, this.col, this.sx, this.sy));
+		cont.addChild(makeEnemy(this.x, this.y, this.dir, this.fr, this.col, this.sx, this.sy, this.health/this.maxHealth));
 	}
 	
 	update(delta, world) {
@@ -258,7 +287,7 @@ class Enemy {
 			down = pathPt.y > this.y;
 		}
 		
-		if (Math.abs(pathPt.x - this.x) + Math.abs(pathPt.y - this.y) < 3) {
+		if (Math.abs(pathPt.x - this.x) + Math.abs(pathPt.y - this.y) < 13) {
 			this.pathIdx++;
 		}
 		
@@ -296,6 +325,10 @@ class Enemy {
 			this.fr += delta;
 		} else {
 			this.fr = 0;
+		}
+		
+		if (this.health < 0) {
+			this.remove = true;
 		}
 	}
 }
@@ -347,7 +380,7 @@ let oreProps = [
 	["STONE", 10, 0x666666, 0x777777, 0x888888],
 	["COAL", 20, 0x000000, 0x111111, 0x222222],
 	["METAL", 40, 0xbbbbbb, 0xcccccc, 0xdddddd],
-	["CRYSTAL", 80, 0xdd0000, 0xee0000, 0xff0000],
+	["CRYSTAL", 80, 0x1111bb, 0x3333dd, 0x6666ff],
 ];
 
 class Stone {
@@ -424,6 +457,170 @@ class House {
 	}
 }
 
+//name, damage, range, frames between shots, color
+const gunConfigs = [
+	["WOOD GUN", 1, 80, 90, 0x352315],
+	["STONE GUN", 2, 100, 60, 0x666666],
+	["METAL GUN", 4, 150, 30, 0xdddddd],
+	["FIRE GUN", 8, 100, 30, 0xff5500],
+	["LASER GUN", 24, 100, 60, 0x55aaff]
+];
+
+class Gun {
+	constructor(x, y, type) {
+		let c = gunConfigs[type];
+		
+		this.x = x;
+		this.health = 10;
+		this.y = y;
+		this.z = 0;
+		this.type = c[0];
+		this.damage = c[1];
+		this.range = c[2];
+		this.delay = c[3];
+		this.color = c[4];
+		this.timer = 0;
+		this.hitBox = {
+			w: 20,
+			h: 6
+		};
+		this.stationary = true;
+		this.inRange = true;
+	}
+	
+	render(cont) {
+		let sp = makeGun(this.x, this.y, this.health/10, this.color);
+		if (this.inRange) {
+			sp.interactive = true;
+			sp.buttonMode = true;
+			sp.on("pointerdown", () => {this.onClick()});
+		}
+		cont.addChild(sp);
+	}
+	
+	onClick() {
+		this.clickedLast = true;
+	}
+	
+	update(delta, world) {
+		let dist = Math.abs(world.player.x - this.x) + Math.abs(world.player.y - this.y);
+		this.inRange = false;
+		if (dist < 32) {
+			this.inRange = true;
+		}
+		if (this.clickedLast) {
+			this.clickedLast = false;
+			//TODO gun click
+			//world.treeClicked(this);
+		}
+		
+		this.timer += delta;
+		if (this.timer >= this.delay) {
+			this.timer = 0;
+			//shoot
+			let target = this.findClosestEnemy(world);
+			if (target) {
+				let vel = this.aim(2, target.x - this.x, target.y - this.y, target.vx, target.vy);
+				world.entities.push(new Bullet(this.x, this.y, vel.vx, vel.vy, this.damage, this.color));
+			}
+		}
+		
+	}
+	
+	aim(speed, ex, ey, evx, evy) {
+		let a = evx * evx + evy * evy - speed * speed;
+		let b = 2*evx*ex + 2*evy*ey;
+		let c = ex*ex + ey*ey;
+		
+		let inner = b*b - 4 * a * c;
+		if (inner < 0) {
+			return null;
+		}
+		
+		let tHigh = (-b + Math.sqrt(inner)) / (2 * a);
+		let tLow = (-b - Math.sqrt(inner)) / (2 * a);
+
+		if (tHigh < 0 && tLow < 0) {
+			return null;
+		}
+		let tFin = 0;
+		if (tHigh < 0 || tLow < 0) {
+			tFin = Math.max(tHigh, tLow);
+		} else {
+			tFin = Math.min(tHigh, tLow);
+		}
+		
+		//tFin is the number of ticks until collision
+		//calculate enemy position in tFin clicks
+		let exFin = ex + evx * tFin;
+		let eyFin = ey + evy * tFin;
+		
+		//now aim for that position
+		let dist = Math.sqrt(exFin * exFin + eyFin * eyFin);
+		let vx = exFin * speed / dist;
+		let vy = eyFin * speed / dist;
+		return {vx,vy};
+	}
+	
+	findClosestEnemy(world) {
+		let closest = null;
+		let minDist = 999999;
+		for (let i in world.entities) {
+			let e = world.entities[i];
+			if (e.type !== "ENEMY")
+				continue;
+			let dx = e.x - this.x;
+			let dy = e.y - this.y;
+			let dist = dx * dx + dy * dy;
+			if (dist < this.range * this.range) {
+				if (dist < minDist) {
+					minDist = dist;
+					closest = e;
+				}
+			}
+		}
+		return closest;
+	}
+}
+
+class Bullet {
+	constructor(x, y, vx, vy, damage, color) {
+		this.life = 100;
+		this.x = x;
+		this.y = y;
+		this.vx = vx;
+		this.vy = vy;
+		this.damage = damage;
+		this.color = color;
+		this.hitBox = {
+			w: 6,
+			h: 6
+		};
+	}
+	
+	handleCollision(e) {
+		if (e.type === "ENEMY") {
+			e.health -= this.damage;
+			this.remove = true;
+		}
+		return true;
+	}
+	
+	update(delta, world) {
+		this.x += this.vx * delta;
+		this.y += this.vy * delta;
+		this.life -= delta;
+		if (this.life < 0) {
+			this.remove = true;
+		}
+	}
+	
+	render(cont) {
+		cont.addChild(makeBullet(this.x, this.y, this.color));
+	}
+	
+}
+
 class EntityWave {
 	constructor() {
 		this.timer = 0;
@@ -472,7 +669,7 @@ class World {
 		}
 		this.entities = [];
 		this.entities.push(new House(path[path.length - 1].x * 32 + 16, path[path.length - 1].y * 32 + 16));
-		this.player = new Player(path[path.length - 1].x * 32, path[path.length - 1].y * 32)
+		this.player = new Player(path[path.length - 1].x * 32, path[path.length - 1].y * 32 + 32)
 		this.entities.push(this.player);
 		for (let i = 0; i < 100; i++) {
 			let x = Math.floor(Math.random() * width);
@@ -565,6 +762,17 @@ class World {
 						let th = (ie.hitBox.h + je.hitBox.h) / 2;
 						if (dxa < tw && dya < th) {
 							//collision
+							let ieRet = false;
+							let jeRet = false;
+							if (ie.handleCollision) {
+								ieRet = ie.handleCollision(je);
+							}
+							if (je.handleCollision) {
+								jeRet = je.handleCollision(ie);
+							}
+							if (ieRet || jeRet) {
+								continue;
+							}
 							if (tw - dxa < th - dya) {
 								//correct x
 								let cx = (tw - dxa);
@@ -633,6 +841,11 @@ class World {
 		if (guiRef) {
 			stage.addChildAt(this.guiCont, 2);
 		}
+		
+		this.entityCont.x = 400-this.player.x;
+		this.entityCont.y = 300-this.player.y;
+		this.groundCont.x = 400-this.player.x;
+		this.groundCont.y = 300-this.player.y;
 	}
 	
 	updateGroundCont(stage) {
@@ -820,6 +1033,28 @@ function canCraft(cont, recipe) {
 	return false;
 }
 
+function makeGun(x, y, health, col) {
+	let col2 = col & 0xc0c0c0;
+	let g1 = makeRect(6, 6, col2, 13, -18);
+	let g2 = makeRect(18, 6, col, 7, -12);
+	let g3 = makeRect(24, 6, col2, 4, -6);
+	let healthRed = makeRect(24, 3, 0xff0000, 4, -24);
+	let healthGreen = makeRect(24*health, 3, 0x00ff00, 4, -24);
+	let c = new PIXI.Container();
+	c.addChild(g1, g2, g3);
+	if (health < .99) {
+		c.addChild(healthRed, healthGreen);
+	}
+	c.x = x-16;
+	c.y = y;
+	return c;
+}
+
+function makeBullet(x, y, col) {
+	let c = makeRect(6, 6, col, x - 3, y - 3);
+	return c;
+}
+
 function makeTree(x, y, health) {
 	let trunk = makeRect(6, 32, 0x231709, 13, -16);
 	let l1 = makeRect(6, 6, 0x007500, 13, -16);
@@ -917,7 +1152,7 @@ function makePlayer(x, y, dir, fr, cooldown) {
 	return c;
 }
 
-function makeEnemy(x, y, dir, fr, col, sx, sy) {
+function makeEnemy(x, y, dir, fr, col, sx, sy, health) {
 	let body = makeRect(20, 20, col, 1, 1);
 	let outline = makeRect(22, 22, 0x000000, 0, 0);
 	
@@ -960,6 +1195,11 @@ function makeEnemy(x, y, dir, fr, col, sx, sy) {
 	c.y = -22;
 	let c2 = new PIXI.Container();
 	c2.addChild(c);
+	let healthRed = makeRect(24, 3, 0xff0000, -12, -27);
+	let healthGreen = makeRect(24*health, 3, 0x00ff00, -12, -27);
+	if (health < .9999) {
+		c2.addChild(healthRed, healthGreen);
+	}
 	c2.scale.x = sx;
 	c2.scale.y = sy;
 	c2.x = x;

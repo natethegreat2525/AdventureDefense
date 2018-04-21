@@ -66,6 +66,57 @@ let crafting = [
 	},
 ];
 
+//hp, c1, c2, c3
+let oreProps = [
+	["STONE", 10, 0x666666, 0x777777, 0x888888],
+	["COAL", 20, 0x000000, 0x111111, 0x222222],
+	["METAL", 40, 0xbbbbbb, 0xcccccc, 0xdddddd],
+	["CRYSTAL", 80, 0x1111bb, 0x3333dd, 0x6666ff],
+];
+
+//health color, scalex, scaley, speed
+const enemyParams = [
+	[2, 0x005500, .5, .5, .5],
+	[6, 0x550000, .5, .5, .5],
+	[12, 0x000055, .5, .5, .5],
+	[20, 0x008888, 1, .5, 1],
+	[40, 0x880088, .5, 1, 1],
+	[80, 0x888800, .7, .7, 1]
+];
+
+//name, damage, range, frames between shots, color
+const gunConfigs = [
+	["WOOD GUN", 1, 80, 190, 0x352315],
+	["STONE GUN", 2, 100, 120, 0x666666],
+	["METAL GUN", 1, 150, 30, 0xdddddd],
+	["FIRE GUN", 8, 200, 80, 0xff5500],
+	["LASER GUN", 24, 200, 120, 0x55aaff]
+];
+
+//type number spacing delay
+const waveConfig = [
+	[0, 10, 120, 0],
+	[0, 20, 100, 0, 1, 2, 500, 1000],
+];
+
+let path = [
+	{x:8, y:0},
+	{x:8, y:6},
+	{x:2, y:6},
+	{x:2, y:13},
+	{x:10, y:13},
+	{x:10, y:3},
+	{x:21, y:3},
+	{x:21, y:13},
+	{x:15, y:13},
+	{x:15, y:8}
+];
+
+for (let i = 0; i < path.length; i++) {
+	path[i].x += 90;
+	path[i].y += 90;
+}
+
 class Inventory {
 	constructor() {
 		this.contents = {};
@@ -233,14 +284,7 @@ class Player {
 	}
 }
 
-const enemyParams = [
-	[1, 0x005500, .5, .5, .5],
-	[3, 0x550000, .5, .5, .5],
-	[6, 0x000055, .5, .5, .5],
-	[10, 0x008888, 1, .5, 1],
-	[20, 0x880088, .5, 1, 1],
-	[40, 0x888800, .7, .7, 1]
-]
+
 
 class Enemy {
 	constructor(x, y, type) {
@@ -320,14 +364,16 @@ class Enemy {
 				this.vx /= Math.sqrt(2);
 				this.vy /= Math.sqrt(2);
 			}
-			this.x += this.vx * this.spd * delta;
-			this.y += this.vy * this.spd * delta;
+			this.vx *= this.spd;
+			this.vy *= this.spd;
+			this.x += this.vx * delta;
+			this.y += this.vy * delta;
 			this.fr += delta;
 		} else {
 			this.fr = 0;
 		}
 		
-		if (this.health < 0) {
+		if (this.health <= 0) {
 			this.remove = true;
 		}
 	}
@@ -376,12 +422,6 @@ class Tree {
 	}
 }
 
-let oreProps = [
-	["STONE", 10, 0x666666, 0x777777, 0x888888],
-	["COAL", 20, 0x000000, 0x111111, 0x222222],
-	["METAL", 40, 0xbbbbbb, 0xcccccc, 0xdddddd],
-	["CRYSTAL", 80, 0x1111bb, 0x3333dd, 0x6666ff],
-];
 
 class Stone {
 	constructor(x, y, t) {
@@ -457,14 +497,6 @@ class House {
 	}
 }
 
-//name, damage, range, frames between shots, color
-const gunConfigs = [
-	["WOOD GUN", 1, 80, 90, 0x352315],
-	["STONE GUN", 2, 100, 60, 0x666666],
-	["METAL GUN", 4, 150, 30, 0xdddddd],
-	["FIRE GUN", 8, 100, 30, 0xff5500],
-	["LASER GUN", 24, 100, 60, 0x55aaff]
-];
 
 class Gun {
 	constructor(x, y, type) {
@@ -621,21 +653,34 @@ class Bullet {
 	
 }
 
+
+
 class EntityWave {
-	constructor() {
+	constructor(wave) {
+		let c = waveConfig[wave];
 		this.timer = 0;
-		this.space = 60;
-		this.count = 0;
+		this.sets = [];
+		for (let i = 0; i < c.length / 4; i++) {
+			this.sets.push({type: c[i*4], number: c[i*4+1], spacing: c[i*4+2], delay: c[i*4+3], timer: 0});
+		}
 	}
 	
 	render() {}
+	
 	update(delta, world) {
-		this.timer += delta;
-		if (this.timer > this.space && this.count < 10) {
-			this.timer -= this.space;
-			let st = world.path[0];
-			this.count++;
-			world.entities.push(new Enemy(st.x * 32 + 16, st.y * 32 + 16, 5));
+		for (let i in this.sets) {
+			let set = this.sets[i];
+			if (set.delay <= 0 && set.number > 0) {
+				set.timer -= delta;
+				if (set.timer <= 0) {
+					set.number--;
+					set.timer += set.spacing;
+					let st = world.path[0];
+					world.entities.push(new Enemy(st.x * 32 + 16, st.y * 32 + 16, set.type));
+				}
+			} else {
+				set.delay -= delta;
+			}
 		}
 	}
 }
@@ -685,7 +730,7 @@ class World {
 				this.entities.push(new Stone(32 * x + 16 + Math.random() * 10 - 5, 32 * y + 16 + Math.random() * 10 - 5, Math.floor(Math.random() * 4)));
 			}
 		}
-		this.entities.push(new EntityWave());
+		this.entities.push(new EntityWave(0));
 	}
 	
 	treeClicked(tree) {
@@ -740,6 +785,54 @@ class World {
 		}
 	}
 	
+	collide(ie, je) {
+		let dx = ie.x - je.x;
+		let dy = ie.y - je.y;
+		let dxa = Math.abs(dx);
+		let dya = Math.abs(dy);
+		let tw = (ie.hitBox.w + je.hitBox.w) / 2;
+		let th = (ie.hitBox.h + je.hitBox.h) / 2;
+		if (dxa < tw && dya < th) {
+			//collision
+			let ieRet = false;
+			let jeRet = false;
+			if (ie.handleCollision) {
+				ieRet = ie.handleCollision(je);
+			}
+			if (je.handleCollision) {
+				jeRet = je.handleCollision(ie);
+			}
+			if (ieRet || jeRet) {
+				return;
+			}
+			if (tw - dxa < th - dya) {
+				//correct x
+				let cx = (tw - dxa);
+				if (!je.stationary && !ie.stationary) {
+					cx *= 2;
+				}
+				if (!ie.stationary) {
+					ie.x += Math.sign(dx) * cx;
+				}
+				if (!je.stationary) {
+					je.x -= Math.sign(dx) * cx;
+				}
+			} else {
+				//correct y
+				let cy = (th - dya);
+				if (!je.stationary && !ie.stationary) {
+					cy *= 2;
+				}
+				if (!ie.stationary) {
+					ie.y += Math.sign(dy) * cy;
+				}
+				if (!je.stationary) {
+					je.y -= Math.sign(dy) * cy;
+				}
+			}
+		}
+	}
+	
 	updateEntities(delta) {
 		for (let i = 0; i < this.entities.length; i++) {
 			this.entities[i].update(delta, this);
@@ -748,57 +841,39 @@ class World {
 				i--;
 			}
 		}
+		/*
+		cList = [];
+		for (let i = 0; i < this.width / 4; i++) {
+			cList.push([]);
+			for (let j = 0; j < this.height / 4; j++) {
+				cList[i].push([]);
+			}
+		}
+		
+		for (let i in this.entities) {
+			let ie = this.entities[i];
+			if (ie.hitBox) {
+				let x = Math.floor(ie.x / 128);
+				let y = Math.floor(ie.y / 128);
+				cList[x][y].push(ie);
+			}
+		}
+		
+		for (let a in cList) {
+			let bList = cList[a];
+			for (let b in bList) {
+				
+			}
+		}
+		*/
+		
 		for (let i = 0; i < this.entities.length; i++) {
 			let ie = this.entities[i];
 			if (ie.hitBox) {
 				for (let j = i + 1; j < this.entities.length; j++) {
 					let je = this.entities[j];
 					if (je.hitBox) {
-						let dx = ie.x - je.x;
-						let dy = ie.y - je.y;
-						let dxa = Math.abs(dx);
-						let dya = Math.abs(dy);
-						let tw = (ie.hitBox.w + je.hitBox.w) / 2;
-						let th = (ie.hitBox.h + je.hitBox.h) / 2;
-						if (dxa < tw && dya < th) {
-							//collision
-							let ieRet = false;
-							let jeRet = false;
-							if (ie.handleCollision) {
-								ieRet = ie.handleCollision(je);
-							}
-							if (je.handleCollision) {
-								jeRet = je.handleCollision(ie);
-							}
-							if (ieRet || jeRet) {
-								continue;
-							}
-							if (tw - dxa < th - dya) {
-								//correct x
-								let cx = (tw - dxa);
-								if (!je.stationary && !ie.stationary) {
-									cx *= 2;
-								}
-								if (!ie.stationary) {
-									ie.x += Math.sign(dx) * cx;
-								}
-								if (!je.stationary) {
-									je.x -= Math.sign(dx) * cx;
-								}
-							} else {
-								//correct y
-								let cy = (th - dya);
-								if (!je.stationary && !ie.stationary) {
-									cy *= 2;
-								}
-								if (!ie.stationary) {
-									ie.y += Math.sign(dy) * cy;
-								}
-								if (!je.stationary) {
-									je.y -= Math.sign(dy) * cy;
-								}
-							}
-						}
+						this.collide(ie, je);
 					}
 				}
 			}
@@ -834,7 +909,17 @@ class World {
 			}
 			return 0;
 		});
+		
 		for (let i = 0; i < this.entities.length; i++) {
+			let render = true;
+			let ent = this.entities[i];
+			if (ent.x && ent.y) {
+				let dx = Math.abs(ent.x - this.player.x);
+				let dy = Math.abs(ent.y - this.player.y);
+				if (dx > 100 || dy > 100) {
+					render = false;
+				}
+			}
 			this.entities[i].render(this.entityCont, this.guiCont, guiRef);
 		}
 		stage.addChildAt(this.entityCont, 1);
@@ -923,19 +1008,8 @@ PIXI.loader
 
 //This `setup` function will run when the image has loaded
 function setup() {
-	let path = [
-		{x:5, y:0},
-		{x:5, y:4},
-		{x:2, y:4},
-		{x:2, y:13},
-		{x:10, y:13},
-		{x:10, y:3},
-		{x:21, y:3},
-		{x:21, y:13},
-		{x:15, y:13},
-		{x:15, y:8}
-	];
-	world = new World(24, 16, path);
+
+	world = new World(150, 150, path);
 
 	world.updateGroundCont(app.stage);
 	//app.stage.addChild(greenRect);
@@ -1153,6 +1227,7 @@ function makePlayer(x, y, dir, fr, cooldown) {
 }
 
 function makeEnemy(x, y, dir, fr, col, sx, sy, health) {
+	health = Math.max(health, 0);
 	let body = makeRect(20, 20, col, 1, 1);
 	let outline = makeRect(22, 22, 0x000000, 0, 0);
 	

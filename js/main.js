@@ -1086,21 +1086,32 @@ function makeTile(idx, x, y) {
 function makeInventory(cont) {
 	let c = new PIXI.Container();
 	let style = new PIXI.TextStyle({
-		fontSize: 20,
+		fontSize: 15,
 		fontWeight: "bold",
 		fill: "#dddddd"
 	});
+	let titleStyle = new PIXI.TextStyle({
+		fontSize: 20,
+		fontWeight: "bold",
+		fill: "#ffffff"
+	});
+	
 	let cnt = 0;
 	for (let prop in cont) {
 		cnt++;
 	}
-	let bg = makeRect(160, 20*cnt, 0x222222, 0, 0);
-	cnt = 0;
+	let bg = makeRect(160, 15*cnt + 25, 0x222222, 0, 0);
 	c.addChild(bg);
+
+	let title = new PIXI.Text("INVENTORY", titleStyle);
+	title.x = 5;
+	title.y = 0;
+	c.addChild(title);
+	cnt = 0;
 	for (let prop in cont) {
 		let txt = new PIXI.Text(prop + ": " + cont[prop], style);
 		txt.x = 5;
-		txt.y = cnt * 20;
+		txt.y = cnt * 15 + 25;
 		c.addChild(txt);
 		cnt++;
 	}

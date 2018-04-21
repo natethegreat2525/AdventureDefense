@@ -4,6 +4,13 @@ let leftKey = keyboard(37);
 let upKey = keyboard(38);
 let downKey = keyboard(40);
 
+let wKey = keyboard(87);
+let aKey = keyboard(65);
+let dKey = keyboard(68);
+let sKey = keyboard(83);
+
+let spaceKey = keyboard(32);
+
 let leftMouseDown = false;
 let rightMouseDown = false;
 
@@ -11,58 +18,58 @@ let crafting = [
 //picks
 	{
 		name: "WOOD PICK",
-		WOOD: 10,
+		WOOD: 5,
 	},
 	{
 		name: "STONE PICK",
-		WOOD: 5,
+		WOOD: 3,
 		STONE: 5,
 	},
 	{
 		name: "METAL PICK",
-		WOOD: 5,
+		WOOD: 3,
 		METAL: 5,
 	},
 //axes
 	{
 		name: "WOOD AXE",
-		WOOD: 10,
+		WOOD: 5,
 	},
 	{
 		name: "STONE AXE",
-		WOOD: 5,
+		WOOD: 3,
 		STONE: 5,
 	},
 	{
 		name: "METAL AXE",
-		WOOD: 5,
+		WOOD: 3,
 		METAL: 5,
 	},
 //towers
 
 	{
 		name: "WOOD GUN",
-		WOOD: 5,
+		WOOD: 3,
 	},
 	{
 		name: "STONE GUN",
-		STONE: 5,
+		STONE: 3,
 	},
 	{
 		name: "METAL GUN",
-		METAL: 5,
+		METAL: 3,
 	},
 	{
 		name: "FIRE GUN",
-		WOOD: 5,
-		COAL: 5,
-		METAL: 5,
+		WOOD: 3,
+		COAL: 3,
+		METAL: 3,
 	},
 	{
 		name: "LASER GUN",
-		COAL: 5,
-		METAL: 5,
-		CRYSTAL: 5,
+		COAL: 3,
+		METAL: 3,
+		CRYSTAL: 3,
 	},
 ];
 
@@ -182,6 +189,7 @@ class Player {
 		
 		this.stationary = false;
 		this.inventory = new Inventory()
+		/*
 		for (let i = 0; i < 20; i++) {
 			this.inventory.add("WOOD");
 			this.inventory.add("STONE");
@@ -192,6 +200,7 @@ class Player {
 	
 		this.inventory.add("METAL PICK");
 		this.inventory.add("METAL AXE");
+		*/
 
 	}
 	
@@ -209,28 +218,47 @@ class Player {
 	
 	update(delta, world) {
 		this.cooldown -= delta;
+		if (this.mustRest) {
+			this.cooldown += delta/2;
+		}
 		this.cooldown = Math.max(this.cooldown, 0);
+		if (this.cooldown === 0) {
+			this.mustRest = false;
+		}
+		
 		let mv = false;
 		let spd = 1.5;
+
+		if (spaceKey.isDown) {
+			if (this.cooldown < 30 && !this.mustRest) {
+				this.cooldown += 1.5*delta;
+				spd *= 2;
+			} else {
+				if (this.cooldown >= 30) {
+					this.mustRest = true;
+				}
+				
+			}
+		}
 		this.vx = 0;
 		this.vy = 0;
 
-		if (upKey.isDown) {
+		if (upKey.isDown || wKey.isDown) {
 			this.dir = 1;
 			this.vy += -1;
 			mv = true;
 		}
-		if (rightKey.isDown) {
+		if (rightKey.isDown || dKey.isDown) {
 			this.dir = 2;
 			this.vx += 1;
 			mv = true;
 		}
-		if (leftKey.isDown) {
+		if (leftKey.isDown || aKey.isDown) {
 			this.dir = 0;
 			this.vx += -1;
 			mv = true;
 		}
-		if (downKey.isDown) {
+		if (downKey.isDown || sKey.isDown) {
 			this.dir = 3;
 			this.vy += 1;
 			mv = true;
@@ -716,25 +744,33 @@ class World {
 		this.entities.push(new House(path[path.length - 1].x * 32 + 16, path[path.length - 1].y * 32 + 16));
 		this.player = new Player(path[path.length - 1].x * 32, path[path.length - 1].y * 32 + 32)
 		this.entities.push(this.player);
-		for (let i = 0; i < 1000; i++) {
-			let x = Math.floor(Math.random() * width);
-			let y = Math.floor(Math.random() * height);
-			if (this.map[x][y] == 0) {
-				this.entities.push(new Tree(32 * x + 16 + Math.random() * 10 - 5, 32 * y + 16 + Math.random() * 10 - 5));
-			}
-		}
-		for (let i = 0; i < 10; i++) {
-			let x = Math.floor(Math.random() * width);
-			let y = Math.floor(Math.random() * height);
-			if (this.map[x][y] == 0) {
-				this.entities.push(new Stone(32 * x + 16 + Math.random() * 10 - 5, 32 * y + 16 + Math.random() * 10 - 5, Math.floor(Math.random() * 4)));
-			}
-		}
+		
+		this.generate();
+		
 		this.entities.push(new EntityWave(0));
 	}
 	
 	generate() {
-		
+		for (let i = 0; i < 2000; i++) {
+			let x = Math.floor(Math.random() * this.width);
+			let y = Math.floor(Math.random() * this.height);
+			if (this.map[x][y] == 0) {
+				this.entities.push(new Tree(32 * x + 16 + Math.random() * 10 - 5, 32 * y + 16 + Math.random() * 10 - 5));
+			}
+		}
+		for (let i = 0; i < 500; i++) {
+			let x = Math.floor(Math.random() * this.width);
+			let y = Math.floor(Math.random() * this.height);
+			let midX = this.width / 2;
+			let midY = this.height / 2;
+			let dx = x - midX;
+			let dy = y - midY;
+			let dist = Math.sqrt(dx * dx + dy * dy) / 20;
+			let maxVal = Math.min(4, dist);
+			if (this.map[x][y] == 0) {
+				this.entities.push(new Stone(32 * x + 16 + Math.random() * 10 - 5, 32 * y + 16 + Math.random() * 10 - 5, Math.floor(Math.random() * maxVal)));
+			}
+		}
 	}
 	
 	treeClicked(tree) {

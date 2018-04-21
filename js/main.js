@@ -716,7 +716,7 @@ class World {
 		this.entities.push(new House(path[path.length - 1].x * 32 + 16, path[path.length - 1].y * 32 + 16));
 		this.player = new Player(path[path.length - 1].x * 32, path[path.length - 1].y * 32 + 32)
 		this.entities.push(this.player);
-		for (let i = 0; i < 100; i++) {
+		for (let i = 0; i < 1000; i++) {
 			let x = Math.floor(Math.random() * width);
 			let y = Math.floor(Math.random() * height);
 			if (this.map[x][y] == 0) {
@@ -731,6 +731,10 @@ class World {
 			}
 		}
 		this.entities.push(new EntityWave(0));
+	}
+	
+	generate() {
+		
 	}
 	
 	treeClicked(tree) {
@@ -833,6 +837,16 @@ class World {
 		}
 	}
 	
+	collideLists(a, b) {
+		for (let i = 0; i < a.length; i++) {
+			let ie = a[i];
+			for (let j = 0; j < b.length; j++) {
+				let je = b[j];
+				this.collide(ie, je);
+			}
+		}
+	}
+	
 	updateEntities(delta) {
 		for (let i = 0; i < this.entities.length; i++) {
 			this.entities[i].update(delta, this);
@@ -841,8 +855,8 @@ class World {
 				i--;
 			}
 		}
-		/*
-		cList = [];
+		
+		let cList = [];
 		for (let i = 0; i < this.width / 4; i++) {
 			cList.push([]);
 			for (let j = 0; j < this.height / 4; j++) {
@@ -859,22 +873,28 @@ class World {
 			}
 		}
 		
-		for (let a in cList) {
+		for (let a = 0; a < cList.length; a++) {
 			let bList = cList[a];
-			for (let b in bList) {
-				
-			}
-		}
-		*/
-		
-		for (let i = 0; i < this.entities.length; i++) {
-			let ie = this.entities[i];
-			if (ie.hitBox) {
-				for (let j = i + 1; j < this.entities.length; j++) {
-					let je = this.entities[j];
-					if (je.hitBox) {
+			for (let b = 0; b < bList.length; b++) {
+				let aList = bList[b];
+				for (let i = 0; i < aList.length; i++) {
+					let ie = aList[i];
+					for (let j = i+1; j < aList.length; j++) {
+						let je = aList[j];
 						this.collide(ie, je);
 					}
+				}
+				let right = (a < cList.length - 1);
+				let down = (b < cList[a].length - 1);
+				if (right) {
+					this.collideLists(aList, cList[a+1][b]);
+				}
+				if (down) {
+					this.collideLists(aList, cList[a][b+1]);
+				}
+				if (right && down) {
+					this.collideLists(aList, cList[a+1][b+1]);
+					this.collideLists(cList[a+1][b], cList[a][b+1]);
 				}
 			}
 		}
@@ -916,11 +936,13 @@ class World {
 			if (ent.x && ent.y) {
 				let dx = Math.abs(ent.x - this.player.x);
 				let dy = Math.abs(ent.y - this.player.y);
-				if (dx > 100 || dy > 100) {
+				if (dx > 430 || dy > 330) {
 					render = false;
 				}
 			}
-			this.entities[i].render(this.entityCont, this.guiCont, guiRef);
+			if (render) {
+				this.entities[i].render(this.entityCont, this.guiCont, guiRef);
+			}
 		}
 		stage.addChildAt(this.entityCont, 1);
 		if (guiRef) {
@@ -1009,7 +1031,7 @@ PIXI.loader
 //This `setup` function will run when the image has loaded
 function setup() {
 
-	world = new World(150, 150, path);
+	world = new World(200, 200, path);
 
 	world.updateGroundCont(app.stage);
 	//app.stage.addChild(greenRect);

@@ -215,7 +215,7 @@ class Player {
 		//for (let i = 0; i < 9; i++) {
 		//	this.inventory.add("WOOD");
 		//}
-		
+		/*
 		for (let i = 0; i < 20; i++) {
 			this.inventory.add("WOOD");
 			this.inventory.add("STONE");
@@ -226,7 +226,7 @@ class Player {
 	
 		this.inventory.add("METAL PICK");
 		this.inventory.add("METAL AXE");
-		
+		*/
 
 	}
 	

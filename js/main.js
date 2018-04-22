@@ -73,6 +73,12 @@ let crafting = [
 		METAL: 3,
 		CRYSTAL: 3,
 	},
+	{
+		name: "TRIPLE GUN",
+		COAL: 3,
+		METAL: 6,
+		CRYSTAL: 6,
+	},
 ];
 
 //hp, c1, c2, c3
@@ -92,6 +98,7 @@ const enemyParams = [
 	[40, 0x880088, .5, 1, 1],
 	[80, 0x888800, .7, .7, 1],
 	[240, 0xff0000, .9, .9, .5],
+	[440, 0xff0000, .9, 1.8, 1],
 ];
 
 //name, damage, range, frames between shots, color, speed, gravity
@@ -100,9 +107,11 @@ const gunConfigs = [
 	["STONE GUN", 2, 100, 120, 0x666666, 1, true],
 	["METAL GUN", 1, 150, 30, 0xdddddd, 3, false],
 	["FIRE GUN", 8, 200, 80, 0xff5500, 2, true],
-	["LASER GUN", 24, 200, 120, 0x55aaff, 3, false]
+	["LASER GUN", 24, 200, 120, 0x55aaff, 3, false],
+	["TRIPLE GUN", 24, 250, 120, 0xffaaaa, 2, true],
 ];
 
+/*
 //type number spacing delay
 const waveConfig = [
 	[0, 10, 240, 1000],
@@ -116,6 +125,7 @@ const waveConfig = [
 	[2, 20, 60, 1000, 3, 20, 60, 1020],
 	[4, 10, 120, 1000, 3, 20, 60, 1030],
 ];
+*/
 
 let path = [
 	{x:8, y:-30},
@@ -205,7 +215,7 @@ class Player {
 		//for (let i = 0; i < 9; i++) {
 		//	this.inventory.add("WOOD");
 		//}
-		/*
+		
 		for (let i = 0; i < 20; i++) {
 			this.inventory.add("WOOD");
 			this.inventory.add("STONE");
@@ -216,7 +226,7 @@ class Player {
 	
 		this.inventory.add("METAL PICK");
 		this.inventory.add("METAL AXE");
-		*/
+		
 
 	}
 	
@@ -665,13 +675,33 @@ class Gun {
 		if (this.timer >= this.delay) {
 			this.timer = 0;
 			//shoot
-			let target = this.findClosestEnemy(world);
-			if (target) {
-				let vel = this.aim(this.speed, target.x - this.x, target.y - (this.y - 18), target.vx, target.vy);
+			let target1 = this.findClosestEnemy(world, []);
+			let target2 = this.findClosestEnemy(world, [target1]);
+			let target3 = this.findClosestEnemy(world, [target1, target2]);
+			if (target1) {
+				let vel = this.aim(this.speed, target1.x - this.x, target1.y - (this.y - 18), target1.vx, target1.vy);
 				if (vel && isFinite(vel.vx + vel.vy + vel.vz)) {
-					world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color, this.gravity, -vel.vz, this.type === "FIRE GUN"));
+					world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color, this.gravity, -vel.vz, this.type === "FIRE GUN" || this.type === "TRIPLE GUN"));
 				} else {
 					this.timer = this.delay;
+				}
+			}
+			if (this.type === "TRIPLE GUN") {
+				if (target2) {
+					let vel = this.aim(this.speed, target2.x - this.x, target2.y - (this.y - 18), target2.vx, target2.vy);
+					if (vel && isFinite(vel.vx + vel.vy + vel.vz)) {
+						world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color, this.gravity, -vel.vz, true));
+					} else {
+						this.timer = this.delay;
+					}
+				}
+				if (target3) {
+					let vel = this.aim(this.speed, target3.x - this.x, target3.y - (this.y - 18), target3.vx, target3.vy);
+					if (vel && isFinite(vel.vx + vel.vy + vel.vz)) {
+						world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color, this.gravity, -vel.vz, true));
+					} else {
+						this.timer = this.delay;
+					}
 				}
 			}
 		}
@@ -716,12 +746,14 @@ class Gun {
 		return {vx,vy,vz};
 	}
 	
-	findClosestEnemy(world) {
+	findClosestEnemy(world, except) {
 		let closest = null;
 		let minDist = 999999;
 		for (let i in world.entities) {
 			let e = world.entities[i];
 			if (e.type !== "ENEMY")
+				continue;
+			if (except.includes(e))
 				continue;
 			let dx = e.x - this.x;
 			let dy = e.y - this.y;
@@ -739,7 +771,7 @@ class Gun {
 
 class Bullet {
 	constructor(x, y, vx, vy, damage, color, gravity, vz, trail) {
-		this.life = 100;
+		this.life = 400;
 		this.trail = trail;
 		this.x = x;
 		this.y = y;
@@ -877,8 +909,27 @@ class EntityWave {
 	}
 }
 */
-class ConstantWave {
+
+class Timer {
 	constructor() {
+		this.startTime = Date.now();
+	}
+	
+	getTimeDiff() {
+		return Date.now() - this.startTime;
+	}
+	
+	render(cont, guiCont, guiRef) {
+		if (guiRef) {
+			guiCont.addChild(makeTimer(Math.floor(this.getTimeDiff() / 1000)));
+		}
+	}
+	
+	update() {}
+}
+
+class ConstantWave {
+	constructor(accrualPercentage) {
 		this.points = 0;
 		this.ticks = 0;
 		this.nextTicksGoal = 0;
@@ -887,7 +938,7 @@ class ConstantWave {
 		
 		this.rate = 1/250.0;
 		this.maxDelay = 500;
-		this.accrualPercentage = 1.5;
+		this.accrualPercentage = accrualPercentage;
 		this.ticksPerRound = 3600*2;
 		
 		this.enemyPoints = [];
@@ -903,7 +954,7 @@ class ConstantWave {
 		this.ticks += delta;
 		this.roundTicks += delta;
 		
-		if (this.ticks >= this.nextTicksGoal) {
+		if (this.ticks >= this.nextTicksGoal || this.points > this.enemyPoints[0]) {
 			this.ticks = 0;
 			this.nextTicksGoal = Math.random() * this.maxDelay;
 			for (let i = 0; i < this.enemyPoints.length; i++) {
@@ -929,7 +980,7 @@ class ConstantWave {
 
 class World {
 
-	constructor(width, height, path) {
+	constructor(width, height, path, difficulty) {
 		this.width = width;
 		this.height = height;
 		this.map = [];
@@ -961,8 +1012,11 @@ class World {
 		
 		this.generate();
 		
-		this.entities.push(new ConstantWave());
+		this.entities.push(new ConstantWave(difficulty));
 		this.entities.push(new MiniMap());
+		
+		this.timer = new Timer();
+		this.entities.push(this.timer);
 	}
 	
 	generate() {
@@ -1112,6 +1166,10 @@ class World {
 	}
 	
 	updateEntities(delta) {
+		if (this.player.health <= 0 || this.house.health <= 0) {
+			this.gameOver = true;
+			return;
+		}
 		for (let i = 0; i < this.entities.length; i++) {
 			this.entities[i].update(delta, this);
 			if (this.entities[i].remove) {
@@ -1180,7 +1238,7 @@ class World {
 		
 		this.guiRefresh += 1;
 		let guiRef = false;
-		if (this.guiRefresh > 30) {
+		if (this.guiRefresh > 10) {
 			guiRef = true;
 			this.guiRefresh = 0;
 			if (this.guiCont) {
@@ -1297,21 +1355,7 @@ app.renderer.plugins.interaction.on("pointerup", (t) => {
 	}
 });
 
-let world = null;
 
-PIXI.loader
-	.load(setup);
-
-
-//This `setup` function will run when the image has loaded
-function setup() {
-
-	world = new World(200, 200, path);
-
-	world.updateGroundCont(app.stage);
-	//app.stage.addChild(greenRect);
-	app.ticker.add(delta => gameLoop(delta));
-}
 
 function makeTile(idx, x, y) {
 	switch(idx){
@@ -1354,6 +1398,22 @@ function makeInventory(cont) {
 		c.addChild(txt);
 		cnt++;
 	}
+	return c;
+}
+
+function makeTimer(val) {
+	let c = new PIXI.Container();
+
+	let titleStyle = new PIXI.TextStyle({
+		fontSize: 20,
+		fontWeight: "bold",
+		fill: "#ffffff"
+	});
+
+	let title = new PIXI.Text("SCORE: " + val, titleStyle);
+	c.addChild(title);
+	c.x = 350;
+	c.y = 5;
 	return c;
 }
 
@@ -1640,15 +1700,191 @@ function makeRect(w, h, tint, x, y) {
 	return s;
 }
 
+let helpString =
+"Controls:\n\nWSAD or Arrow Keys - Move the player\n\nSpace Bar - Sprint\n\nClicking trees, rocks, and towers - mines them with available tools\n\nClicking items under the crafting menu - creates clicked item." +
+"\n\n\nGoal:\n\nSurvive as long as possible. You must defend your base by building gun towers around it. Unfortunately, the materials you need to build the best gun towers are spread around the map. You must balance time spent exploring and defending your base. As time progresses, harder enemies will be spawned. If you die or your base loses all of its health, the game ends.";
+let world = null;
+let worldCont = null;
+let lastScore = null;
+let level = null;
+let scoreCont = null;
+
+let menuCont = null;
+let helpCont = null;
+let menuBGCont = null;
+
+let bgList = [];
+
+PIXI.loader
+	.load(setup);
+
+
+//This `setup` function will run when the image has loaded
+function setup() {
+	
+	menuCont = new PIXI.Container();
+	menuBGCont = new PIXI.Container();
+	menuCont.addChild(menuBGCont);
+	
+	let style = new PIXI.TextStyle({
+		fontSize: 40,
+		fontWeight: "bold",
+		fill: "#ffffff"
+	});
+	let titleStyle = new PIXI.TextStyle({
+		fontSize: 70,
+		fontWeight: "bold",
+		fill: "#ffffff"
+	});
+	let title = new PIXI.Text("ADVENTURE DEFENSE", titleStyle);
+	title.anchor.x = .5;
+	title.anchor.y = .5;
+	title.x = 400;
+	title.y = 100;
+	menuCont.addChild(title);
+	
+	let easyButton = new PIXI.Text("EASY", style);
+	let mediumButton = new PIXI.Text("MEDIUM", style);
+	let hardButton = new PIXI.Text("HARD", style);
+	let helpButton = new PIXI.Text("HELP", style);
+	easyButton.x = 100;
+	easyButton.y = 250;
+	mediumButton.x = 300;
+	mediumButton.y = 250;
+	hardButton.x = 550;
+	hardButton.y = 250;
+	helpButton.x = 330;
+	helpButton.y = 400;
+	
+	easyButton.interactive = true;
+	mediumButton.interactive = true;
+	hardButton.interactive = true;
+	helpButton.interactive = true;
+	
+	easyButton.buttonMode = true;
+	mediumButton.buttonMode = true;
+	hardButton.buttonMode = true;
+	helpButton.buttonMode = true;
+	
+	easyButton.on('pointerdown', () => {level = "EASY"; startGame(1.5)});
+	mediumButton.on('pointerdown', () => {level = "MEDIUM"; startGame(2)});
+	hardButton.on('pointerdown', () => {level = "HARD"; startGame(2.5)});
+	
+	menuCont.addChild(easyButton, mediumButton, hardButton, helpButton);
+	
+	let helpStyle = new PIXI.TextStyle({
+		fontSize: 20,
+		fontWeight: "bold",
+		fill: "#ffffff",
+		wordWrap: true,
+		wordWrapWidth: 700,
+	});
+	
+	let helpText = new PIXI.Text(helpString, helpStyle);
+	helpText.x = 55;
+	helpText.y = 45;
+	helpCont = new PIXI.Container();
+	helpCont.addChild(makeRect(700, 550, 0x222222, 50, 25));
+	helpCont.addChild(helpText);
+	helpCont.alpha = 0;
+	helpCont.targetAlpha = 0;
+	
+	helpButton.on('pointerover', () => {helpCont.targetAlpha = 1});
+	helpButton.on('pointerout', () => {helpCont.targetAlpha = 0});
+
+	menuCont.addChild(helpCont);
+	
+	app.stage.addChild(menuCont);
+	
+	app.ticker.add(delta => gameLoop(delta));
+}
+
+function startGame(difficulty) {
+	worldCont = new PIXI.Container();
+	makeNewWorld(worldCont, difficulty);
+	app.stage.addChild(worldCont);
+	app.stage.removeChild(menuCont);
+}
+
 function gameLoop(delta){
-	world.updateEntities(delta);
-	world.renderEntities(app.stage);
+	if (!world) {
+		helpCont.alpha = helpCont.alpha * .9 + helpCont.targetAlpha * .1;
+		//display menu
+		if (Math.random() > .9) {
+			let s = null;
+			let v = Math.floor(Math.random() * 5);
+			switch(v) {
+				case 0:
+				s = makeTree(0, 0, 1);
+				break;
+				case 1:
+				s = makePlayer(0, 0, 3, 0, 0, 1);
+				break;
+				case 2:
+				s = makeStone(0, 0, 1, 0x666666, 0x777777, 0x888888);
+				break;
+				case 3:
+				s = makeEnemy(0, 0, 3, 0, 0xff0000, .5, 1, 1);
+				break;
+				case 4:
+				s = makeTile(0, 0, 0);
+				break;
+			}
+			s.x = Math.random() * 800;
+			s.y = -30;
+			s.rotation = Math.random() * 100;
+			s.vr = (Math.random() - .5) * .01;
+			s.vy = Math.random() + .5;
+			s.scale.x = s.vy/1.5;
+			s.scale.y = s.vy/1.5;
+			bgList.push(s);
+			menuBGCont.addChild(s);
+		}
+		for (let i = 0; i < bgList.length; i++) {
+			let e = bgList[i];
+			e.y += e.vy;
+			e.rotation += e.vr;
+			if (e.y > 630) {
+				menuBGCont.removeChild(e);
+				bgList.splice(i, 1);
+				i--;
+			}
+		}
+	} else {
+		if (world.gameOver) {
+			app.stage.removeChild(worldCont);
+			app.stage.addChild(menuCont);
+			worldCont.destroy();
+			lastScore = Math.floor(world.timer.getTimeDiff() / 1000)
+			scoreCont = new PIXI.Container()
+			menuCont.addChildAt(scoreCont, 1);
+			let style = new PIXI.TextStyle({
+				fontSize: 20,
+				fontWeight: "bold",
+				fill: "#aaaaaa"
+			});
+			text = new PIXI.Text("LAST SCORE: " + lastScore + "  DIFFICULTY: " + level, style);
+			text.x = 200;
+			text.y = 200;
+			scoreCont.addChild(text);
+			world = null;
+		} else {
+			if (scoreCont) {
+				menuCont.removeChild(scoreCont);
+				scoreCont.destroy();
+				scoreCont = null;
+			}
+			world.updateEntities(delta);
+			world.renderEntities(worldCont);
+		}
+	}
 
 }
 
-
-
-
+function makeNewWorld(cont, difficulty) {
+	world = new World(200, 200, path, difficulty);
+	world.updateGroundCont(cont);
+}
 
 function keyboard(keyCode) {
 	let key = {};

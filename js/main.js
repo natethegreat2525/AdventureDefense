@@ -231,7 +231,7 @@ class Player {
 
 		if (spaceKey.isDown) {
 			if (this.cooldown < 30 && !this.mustRest) {
-				this.cooldown += 1.5*delta;
+				this.cooldown += 1.3*delta;
 				spd *= 2;
 			} else {
 				if (this.cooldown >= 30) {
@@ -309,6 +309,9 @@ class Player {
 			
 			this.craftingVal = null;
 		}
+		
+		this.x = Math.min(Math.max(this.x, 16), world.width * 32 - 16)
+		this.y = Math.min(Math.max(this.y, 16), world.height * 32 - 16)
 	}
 }
 
@@ -525,6 +528,23 @@ class House {
 	}
 }
 
+class MiniMap {
+	constructor() {
+		this.type = "MAP";
+	}
+	
+	render(cont, guiCont, guiRef) {
+		if (guiRef) {
+			guiCont.addChild(makeMiniMap(690, 0, world.player.x / (32 * world.width), world.player.y / (32 * world.height)));
+		}
+	}
+	
+	update(delta) {
+		return;
+	}
+}
+
+
 
 class Gun {
 	constructor(x, y, type) {
@@ -571,7 +591,7 @@ class Gun {
 		if (this.clickedLast) {
 			this.clickedLast = false;
 			//TODO gun click
-			//world.treeClicked(this);
+			world.gunClicked(this);
 		}
 		
 		this.timer += delta;
@@ -580,8 +600,8 @@ class Gun {
 			//shoot
 			let target = this.findClosestEnemy(world);
 			if (target) {
-				let vel = this.aim(2, target.x - this.x, target.y - this.y, target.vx, target.vy);
-				world.entities.push(new Bullet(this.x, this.y, vel.vx, vel.vy, this.damage, this.color));
+				let vel = this.aim(2, target.x - this.x, target.y - (this.y - 18), target.vx, target.vy);
+				world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color));
 			}
 		}
 		
@@ -748,6 +768,7 @@ class World {
 		this.generate();
 		
 		this.entities.push(new EntityWave(0));
+		this.entities.push(new MiniMap());
 	}
 	
 	generate() {
@@ -796,6 +817,19 @@ class World {
 		if (tree.health <= 0) {
 			tree.remove = true;
 			this.player.inventory.add("WOOD");
+		}
+	}
+	
+	gunClicked(gun) {
+		if (this.player.cooldown > 0) {
+			return;
+		}
+		this.player.cooldown = 30;
+		
+		
+		gun.health--;
+		if (gun.health <= 0) {
+			gun.remove = true;
 		}
 	}
 	
@@ -1189,6 +1223,20 @@ function makeGun(x, y, health, col) {
 		c.addChild(healthRed, healthGreen);
 	}
 	c.x = x-16;
+	c.y = y;
+	return c;
+}
+
+function makeMiniMap(x, y, px, py) {
+	let g1 = makeRect(110, 110, 0x000000, 0, 0);
+	let g2 = makeRect(100, 100, 0x00aa00, 5, 5);
+	let g3 = makeRect(3, 3, 0xffffff, 5 + px * 100, 5 + py * 100);
+	let g4 = makeRect(3, 3, 0xff0000, 55, 55);
+	
+	let c = new PIXI.Container();
+	c.addChild(g1, g2, g3, g4);
+	
+	c.x = x;
 	c.y = y;
 	return c;
 }

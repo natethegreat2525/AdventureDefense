@@ -91,18 +91,18 @@ const enemyParams = [
 	[80, 0x888800, .7, .7, 1]
 ];
 
-//name, damage, range, frames between shots, color
+//name, damage, range, frames between shots, color, speed, gravity
 const gunConfigs = [
-	["WOOD GUN", 1, 80, 190, 0x352315],
-	["STONE GUN", 2, 100, 120, 0x666666],
-	["METAL GUN", 1, 150, 30, 0xdddddd],
-	["FIRE GUN", 8, 200, 80, 0xff5500],
-	["LASER GUN", 24, 200, 120, 0x55aaff]
+	["WOOD GUN", 1, 80, 190, 0x352315, 1, true],
+	["STONE GUN", 2, 100, 120, 0x666666, 1, true],
+	["METAL GUN", 1, 150, 30, 0xdddddd, 3, false],
+	["FIRE GUN", 8, 200, 80, 0xff5500, 2, true],
+	["LASER GUN", 24, 200, 120, 0x55aaff, 3, false]
 ];
 
 //type number spacing delay
 const waveConfig = [
-	[0, 10, 120, 0],
+	[0, 1000, 120, 0],
 	[0, 20, 100, 0, 1, 2, 500, 1000],
 ];
 
@@ -189,7 +189,7 @@ class Player {
 		
 		this.stationary = false;
 		this.inventory = new Inventory()
-		/*
+		
 		for (let i = 0; i < 20; i++) {
 			this.inventory.add("WOOD");
 			this.inventory.add("STONE");
@@ -200,7 +200,7 @@ class Player {
 	
 		this.inventory.add("METAL PICK");
 		this.inventory.add("METAL AXE");
-		*/
+		
 
 	}
 	
@@ -447,6 +447,9 @@ class Tree {
 		}
 		if (this.clickedLast) {
 			this.clickedLast = false;
+			for (let i = 0; i < 4; i++) {
+				world.entities.push(new Particle(this.x, this.y, Math.random()-.5, Math.random()-.5, 0x004400, 20, 10));
+			}
 			world.treeClicked(this);
 		}
 		return;
@@ -500,6 +503,9 @@ class Stone {
 		}
 		if (this.clickedLast) {
 			this.clickedLast = false;
+			for (let i = 0; i < 4; i++) {
+				world.entities.push(new Particle(this.x, this.y, Math.random()-.5, Math.random()-.5, this.c3, 20, 10));
+			}
 			world.stoneClicked(this);
 		}
 		return;
@@ -559,6 +565,8 @@ class Gun {
 		this.range = c[2];
 		this.delay = c[3];
 		this.color = c[4];
+		this.speed = c[5];
+		this.gravity = c[6];
 		this.timer = 0;
 		this.hitBox = {
 			w: 20,
@@ -600,8 +608,12 @@ class Gun {
 			//shoot
 			let target = this.findClosestEnemy(world);
 			if (target) {
-				let vel = this.aim(2, target.x - this.x, target.y - (this.y - 18), target.vx, target.vy);
-				world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color));
+				let vel = this.aim(this.speed, target.x - this.x, target.y - (this.y - 18), target.vx, target.vy);
+				if (vel) {
+					world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color, this.gravity, -vel.vz));
+				} else {
+					this.timer = this.delay;
+				}
 			}
 		}
 		
@@ -639,7 +651,10 @@ class Gun {
 		let dist = Math.sqrt(exFin * exFin + eyFin * eyFin);
 		let vx = exFin * speed / dist;
 		let vy = eyFin * speed / dist;
-		return {vx,vy};
+		
+		//calculate vz if gravity is needed
+		let vz = (tFin / 2) * .05;
+		return {vx,vy,vz};
 	}
 	
 	findClosestEnemy(world) {
@@ -664,12 +679,15 @@ class Gun {
 }
 
 class Bullet {
-	constructor(x, y, vx, vy, damage, color) {
+	constructor(x, y, vx, vy, damage, color, gravity, vz) {
 		this.life = 100;
 		this.x = x;
 		this.y = y;
+		this.z = 0;
 		this.vx = vx;
 		this.vy = vy;
+		this.vz = vz;
+		this.gravity = gravity;
 		this.damage = damage;
 		this.color = color;
 		this.hitBox = {
@@ -679,9 +697,10 @@ class Bullet {
 	}
 	
 	handleCollision(e) {
-		if (e.type === "ENEMY") {
+		if (e.type === "ENEMY" && this.z > -3) {
 			e.health -= this.damage;
-			this.remove = true;
+			this.life = 0;
+			
 		}
 		return true;
 	}
@@ -689,6 +708,43 @@ class Bullet {
 	update(delta, world) {
 		this.x += this.vx * delta;
 		this.y += this.vy * delta;
+		if (this.gravity) {
+			this.z += this.vz * delta;
+			this.vz += .05*delta;
+			if (this.z > 0) {
+				this.life = 0;
+			}
+		}
+		this.life -= delta;
+		if (this.life <= 0) {
+			for (let i = 0; i < 4; i++) {
+				world.entities.push(new Particle(this.x, this.y, Math.random()* 2 - 1, Math.random()*2 - 1, this.color, 20, 10));
+			}
+			this.remove = true;
+		}
+	}
+	
+	render(cont) {
+		cont.addChild(makeBullet(this.x, this.y, this.z, this.color));
+	}
+	
+}
+
+class Particle {
+	constructor(x, y, vx, vy, color, life, fade) {
+		this.life = life;
+		this.fade = fade;
+		this.x = x;
+		this.y = y;
+		this.vx = vx;
+		this.vy = vy;
+		this.color = color;
+	}
+	
+	update(delta, world) {
+		this.x += this.vx * delta;
+		this.y += this.vy * delta;
+		
 		this.life -= delta;
 		if (this.life < 0) {
 			this.remove = true;
@@ -696,7 +752,7 @@ class Bullet {
 	}
 	
 	render(cont) {
-		cont.addChild(makeBullet(this.x, this.y, this.color));
+		cont.addChild(makeParticle(this.x, this.y, Math.min(this.life/this.fade, 1), this.color));
 	}
 	
 }
@@ -1241,10 +1297,22 @@ function makeMiniMap(x, y, px, py) {
 	return c;
 }
 
-function makeBullet(x, y, col) {
-	let c = makeRect(6, 6, col, x - 3, y - 3);
+function makeBullet(x, y, z, col) {
+	let c = new PIXI.Container();
+	let b = makeRect(6, 6, col, x - 3, y + z - 3);
+	let s = makeRect(6, 6, 0x000000, x - 3, y);
+	s.alpha = .3;
+	c.addChild(b);
+	c.addChild(s);
 	return c;
 }
+
+function makeParticle(x, y, a, col) {
+	let s = makeRect(6, 6, col, x - 3, y - 3);
+	s.alpha = a;
+	return s;
+}
+
 
 function makeTree(x, y, health) {
 	let trunk = makeRect(6, 32, 0x231709, 13, -16);

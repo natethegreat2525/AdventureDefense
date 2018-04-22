@@ -53,10 +53,12 @@ let crafting = [
 	},
 	{
 		name: "STONE GUN",
+		WOOD: 3,
 		STONE: 3,
 	},
 	{
 		name: "METAL GUN",
+		STONE: 3,
 		METAL: 3,
 	},
 	{
@@ -88,7 +90,8 @@ const enemyParams = [
 	[12, 0x000055, .5, .5, .5],
 	[20, 0x008888, 1, .5, 1],
 	[40, 0x880088, .5, 1, 1],
-	[80, 0x888800, .7, .7, 1]
+	[80, 0x888800, .7, .7, 1],
+	[240, 0xff0000, .9, .9, .5],
 ];
 
 //name, damage, range, frames between shots, color, speed, gravity
@@ -102,12 +105,20 @@ const gunConfigs = [
 
 //type number spacing delay
 const waveConfig = [
-	[0, 1000, 120, 0],
-	[0, 20, 100, 0, 1, 2, 500, 1000],
+	[0, 10, 240, 1000],
+	[0, 20, 200, 1000, 1, 2, 502, 2000],
+	[0, 20, 100, 1000, 1, 3, 502, 2000],
+	[1, 5, 300, 1000, 2, 1, 100, 2500],
+	[0, 50, 50, 1000, 1, 20, 100, 1301],
+	[2, 5, 300, 1000, 3, 1, 100, 2500],
+	[2, 5, 300, 1000, 3, 1, 100, 2500],
+	[0, 20, 60, 2000, 1, 20, 60, 2020, 2, 5, 60, 2040],
+	[2, 20, 60, 1000, 3, 20, 60, 1020],
+	[4, 10, 120, 1000, 3, 20, 60, 1030],
 ];
 
 let path = [
-	{x:8, y:0},
+	{x:8, y:-30},
 	{x:8, y:6},
 	{x:2, y:6},
 	{x:2, y:13},
@@ -180,6 +191,7 @@ class Player {
 		this.dir = 3;
 		this.fr = 0;
 		this.type = "PLAYER";
+		this.health = 10;
 		this.hitBox = {
 			w: 22,
 			h: 6
@@ -188,8 +200,12 @@ class Player {
 		this.craftingVal = null;
 		
 		this.stationary = false;
-		this.inventory = new Inventory()
+		this.inventory = new Inventory();
 		
+		//for (let i = 0; i < 9; i++) {
+		//	this.inventory.add("WOOD");
+		//}
+		/*
 		for (let i = 0; i < 20; i++) {
 			this.inventory.add("WOOD");
 			this.inventory.add("STONE");
@@ -200,12 +216,12 @@ class Player {
 	
 		this.inventory.add("METAL PICK");
 		this.inventory.add("METAL AXE");
-		
+		*/
 
 	}
 	
 	render(cont, guiCont, guiRef) {
-		cont.addChild(makePlayer(this.x, this.y, this.dir, this.fr, this.cooldown/30));
+		cont.addChild(makePlayer(this.x, this.y, this.dir, this.fr, this.cooldown/30, this.health/10));
 		this.inventory.render(cont, guiCont, guiRef, this);
 	}
 	
@@ -343,11 +359,36 @@ class Enemy {
 		this.stationary = false;
 	}
 	
+	handleCollision(e) {
+		if (e.type === "PLAYER") {
+			e.health--;
+			let dx = e.x - this.x;
+			let dy = e.y - this.y;
+			let dist = Math.sqrt (dx * dx + dy * dy);
+			dx = dx * 4 / dist;
+			dy = dy * 4 / dist;
+			e.x += dx;
+			e.y += dy;
+			this.x -= dx * 2;
+			this.y -= dy * 2;
+			this.playerHit = [(this.x + e.x) / 2, (this.y + e.y)/2];
+			this.health--;
+		}
+		return true;
+	}
+	
 	render(cont) {
 		cont.addChild(makeEnemy(this.x, this.y, this.dir, this.fr, this.col, this.sx, this.sy, this.health/this.maxHealth));
 	}
 	
 	update(delta, world) {
+		if (this.playerHit) {
+			world.house.fade = .5;
+			for (let i = 0; i < 20; i++) {
+				world.entities.push(new Particle(this.playerHit[0], this.playerHit[1], Math.random()*2-1, Math.random()*2-1, 0xffffff, 30, 30));
+			}
+			this.playerHit = false;
+		}
 		let pathPt = {};
 		Object.assign(pathPt, world.path[this.pathIdx]);
 		pathPt.x = pathPt.x * 32 + 16;
@@ -517,16 +558,34 @@ class House {
 		this.x = x;
 		this.y = y;
 		this.z = 0;
+		this.health = 10;
 		this.type = "HOUSE";
+		this.alwaysRender = true;
 		this.hitBox = {
 			w: 64,
 			h: 6
 		};
+		this.fade = 0;
 		this.stationary = true;
 	}
 	
-	render(cont) {
-		cont.addChild(makeHouse(this.x, this.y));
+	handleCollision(e) {
+		if (e.type === "ENEMY") {
+			e.remove = true;
+			this.health--;
+			this.fade = 1;
+			return true;
+		}
+	}
+	
+	render(cont, guiCont, guiRef, topLayer) {
+		cont.addChild(makeHouse(this.x, this.y, this.health/10));
+		if (this.fade > 0) {
+			this.fade -= .02;
+			let r = makeRect(800, 600, 0xff0000, 0, 0);
+			r.alpha = this.fade;
+			topLayer.addChild(r);
+		}
 	}
 	
 	update(delta) {
@@ -609,8 +668,8 @@ class Gun {
 			let target = this.findClosestEnemy(world);
 			if (target) {
 				let vel = this.aim(this.speed, target.x - this.x, target.y - (this.y - 18), target.vx, target.vy);
-				if (vel) {
-					world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color, this.gravity, -vel.vz));
+				if (vel && isFinite(vel.vx + vel.vy + vel.vz)) {
+					world.entities.push(new Bullet(this.x, this.y - 18, vel.vx, vel.vy, this.damage, this.color, this.gravity, -vel.vz, this.type === "FIRE GUN"));
 				} else {
 					this.timer = this.delay;
 				}
@@ -679,8 +738,9 @@ class Gun {
 }
 
 class Bullet {
-	constructor(x, y, vx, vy, damage, color, gravity, vz) {
+	constructor(x, y, vx, vy, damage, color, gravity, vz, trail) {
 		this.life = 100;
+		this.trail = trail;
 		this.x = x;
 		this.y = y;
 		this.z = 0;
@@ -714,6 +774,9 @@ class Bullet {
 			if (this.z > 0) {
 				this.life = 0;
 			}
+		}
+		if (this.trail) {
+			world.entities.push(new Particle(this.x, this.y + this.z, 0, 0, 0x555555, 20, 20));
 		}
 		this.life -= delta;
 		if (this.life <= 0) {
@@ -757,8 +820,33 @@ class Particle {
 	
 }
 
+/*class EntityWaveManager {
+	constructor(cur) {
+		this.wave = (cur || 0);
+	}
+	
+	render() {}
+	update(delta, world) {
+		if (this.waveEntity) {
+			for (let i in this.waveEntity.sets) {
+				if (this.waveEntity.sets[i].number > 0) {
+					return;
+				}
+			}
+			for (let e in world.entities) {
+				if (world.entities[e].type === "ENEMY") {
+					return;
+				}
+			}
+			this.wave++;
+		}
+		this.waveEntity = new EntityWave(this.wave);
+		world.entities.push(this.waveEntity);
+	}
+}*/
 
 
+/*
 class EntityWave {
 	constructor(wave) {
 		let c = waveConfig[wave];
@@ -788,7 +876,56 @@ class EntityWave {
 		}
 	}
 }
-
+*/
+class ConstantWave {
+	constructor() {
+		this.points = 0;
+		this.ticks = 0;
+		this.nextTicksGoal = 0;
+		this.roundTicks = 0;
+		this.waveNumber = 0;
+		
+		this.rate = 1/250.0;
+		this.maxDelay = 500;
+		this.accrualPercentage = 1.5;
+		this.ticksPerRound = 3600*2;
+		
+		this.enemyPoints = [];
+		for (let i in enemyParams) {
+			this.enemyPoints.unshift(enemyParams[i][0] * enemyParams[i][4]);
+		}
+	}
+	
+	render() {}
+	
+	update(delta, world) {
+		this.points += delta * this.rate;
+		this.ticks += delta;
+		this.roundTicks += delta;
+		
+		if (this.ticks >= this.nextTicksGoal) {
+			this.ticks = 0;
+			this.nextTicksGoal = Math.random() * this.maxDelay;
+			for (let i = 0; i < this.enemyPoints.length; i++) {
+				if (this.enemyPoints[i] <= this.points) {
+					this.points -= this.enemyPoints[i];
+					let st = world.path[0];
+					world.entities.push(new Enemy(st.x * 32 + 16, st.y * 32 + 16, this.enemyPoints.length - 1 - i));
+					break;
+				}
+			}
+		}
+		
+		if (this.roundTicks >= this.ticksPerRound) {
+			this.waveNumber++;
+			console.log("Wave: " + this.waveNumber);
+			console.log("New point accrual: " + this.rate);
+			this.roundTicks = 0;
+			this.rate *= this.accrualPercentage;
+		}
+		
+	}
+}
 
 class World {
 
@@ -817,13 +954,14 @@ class World {
 			}
 		}
 		this.entities = [];
-		this.entities.push(new House(path[path.length - 1].x * 32 + 16, path[path.length - 1].y * 32 + 16));
+		this.house = new House(path[path.length - 1].x * 32 + 16, path[path.length - 1].y * 32 + 20);
+		this.entities.push(this.house);
 		this.player = new Player(path[path.length - 1].x * 32, path[path.length - 1].y * 32 + 32)
 		this.entities.push(this.player);
 		
 		this.generate();
 		
-		this.entities.push(new EntityWave(0));
+		this.entities.push(new ConstantWave());
 		this.entities.push(new MiniMap());
 	}
 	
@@ -995,7 +1133,11 @@ class World {
 			if (ie.hitBox) {
 				let x = Math.floor(ie.x / 128);
 				let y = Math.floor(ie.y / 128);
-				cList[x][y].push(ie);
+				if (isFinite(x) && isFinite(y)) {
+					cList[x][y].push(ie);
+				} else {
+					console.log(ie, x, y);
+				}
 			}
 		}
 		
@@ -1031,6 +1173,11 @@ class World {
 			stage.removeChild(this.entityCont);
 			this.entityCont.destroy();
 		}
+		if (this.topLayer) {
+			stage.removeChild(this.topLayer);
+			this.topLayer.destroy();
+		}
+		
 		this.guiRefresh += 1;
 		let guiRef = false;
 		if (this.guiRefresh > 30) {
@@ -1044,6 +1191,7 @@ class World {
 		}
 		
 		this.entityCont = new PIXI.Container();
+		this.topLayer = new PIXI.Container();
 		
 		//TODO sort entities by dist
 		this.entities.sort((a, b) => {
@@ -1066,14 +1214,15 @@ class World {
 					render = false;
 				}
 			}
-			if (render) {
-				this.entities[i].render(this.entityCont, this.guiCont, guiRef);
+			if (render || ent.alwaysRender) {
+				this.entities[i].render(this.entityCont, this.guiCont, guiRef, this.topLayer);
 			}
 		}
 		stage.addChildAt(this.entityCont, 1);
 		if (guiRef) {
 			stage.addChildAt(this.guiCont, 2);
 		}
+		stage.addChild(this.topLayer);
 		
 		this.entityCont.x = 400-this.player.x;
 		this.entityCont.y = 300-this.player.y;
@@ -1348,7 +1497,7 @@ function makeStone(x, y, health, c1, c2, c3) {
 	return c;
 }
 
-function makeHouse(x, y) {
+function makeHouse(x, y, health) {
 	let body = makeRect(64, 32, 0xaaaaaa, -32, -32);
 	let r1 = makeRect(70, 6, 0xaa0000, -35, -32);
 	let r2 = makeRect(60, 6, 0xbb0000, -30, -38);
@@ -1357,12 +1506,17 @@ function makeHouse(x, y) {
 	let door = makeRect(10, 16, 0x000000, -5, -16);
 	let c = new PIXI.Container();
 	c.addChild(body, r1, r2, r3, r4, door);
+	let healthRed = makeRect(70, 6, 0xff0000, -35, -60);
+	let healthGreen = makeRect(70*health, 6, 0x00ff00, -35, -60);
+	if (health < .99) {
+		c.addChild(healthRed, healthGreen);
+	}
 	c.x = x;
 	c.y = y;
 	return c;
 }
 
-function makePlayer(x, y, dir, fr, cooldown) {
+function makePlayer(x, y, dir, fr, cooldown, health) {
 	let body = makeRect(20, 20, 0xffffff, 1, 1);
 	let outline = makeRect(22, 22, 0x000000, 0, 0);
 	
@@ -1406,6 +1560,13 @@ function makePlayer(x, y, dir, fr, cooldown) {
 		let cdBar = makeRect(24*cooldown, 3, 0x5555ff, -1, -5);
 		c.addChild(cdBar);
 	}
+	
+	let healthRed = makeRect(24, 3, 0xff0000, -1, -9);
+	let healthGreen = makeRect(24*health, 3, 0x00ff00, -1, -9);
+	if (health < .99) {
+		c.addChild(healthRed, healthGreen);
+	}
+	
 	c.x = x-11;
 	c.y = y-22;
 	return c;

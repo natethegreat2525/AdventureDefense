@@ -103,8 +103,8 @@ const enemyParams = [
 
 //name, damage, range, frames between shots, color, speed, gravity
 const gunConfigs = [
-	["WOOD GUN", 1, 80, 190, 0x352315, 1, true],
-	["STONE GUN", 2, 100, 120, 0x666666, 1, true],
+	["WOOD GUN", 1, 80, 190, 0x352315, 1.5, true],
+	["STONE GUN", 2, 100, 120, 0x666666, 1.5, true],
 	["METAL GUN", 1, 150, 30, 0xdddddd, 3, false],
 	["FIRE GUN", 8, 200, 80, 0xff5500, 2, true],
 	["LASER GUN", 24, 200, 120, 0x55aaff, 3, false],
@@ -127,6 +127,69 @@ const waveConfig = [
 ];
 */
 
+function generatePath() {
+	let p = [];
+	let grid = [];
+	for (let i = 0; i < 100; i++) {
+		grid.push([]);
+		for (let j = 0; j < 100; j++) {
+			grid[i].push(0);
+		}
+	}
+	
+	let cx = 50, cy = 50;
+	let dir = 3;
+	let dist = 0;
+	p.unshift({x: cx*2, y: cy*2});
+
+	let tries = 0;
+	while (dist < 70 && tries < 1000) {
+		tries++;
+		grid[cx][cy] = 1;
+		switch (dir) {
+			case 0:
+			cx--;
+			break;
+			case 1:
+			cy--;
+			break;
+			case 2:
+			cx++;
+			break;
+			case 3:
+			cy++;
+			break;
+		}
+		if (grid[cx][cy] !== 0) {
+			switch (dir) {
+				case 0:
+				cx++;
+				break;
+				case 1:
+				cy++;
+				break;
+				case 2:
+				cx--;
+				break;
+				case 3:
+				cy--;
+				break;
+			}
+			dir = Math.floor(Math.random() * 4);
+		} else {
+			dist++;
+			p.unshift({x: cx * 2, y: cy * 2});
+		}
+		if (Math.random() < .7) {
+			dir = Math.floor(Math.random() * 4);
+		}
+	}
+	if (tries >= 1000) {
+		return generatePath();
+	}
+	return p;
+}
+
 let path = [
 	{x:8, y:-30},
 	{x:8, y:6},
@@ -140,10 +203,13 @@ let path = [
 	{x:15, y:8}
 ];
 
+
 for (let i = 0; i < path.length; i++) {
 	path[i].x += 90;
 	path[i].y += 90;
 }
+path = generatePath();
+
 
 class Inventory {
 	constructor() {
@@ -784,7 +850,7 @@ class Bullet {
 		this.color = color;
 		this.hitBox = {
 			w: 6,
-			h: 6
+			h: 12
 		};
 	}
 	

@@ -978,20 +978,23 @@ class EntityWave {
 
 class Timer {
 	constructor() {
-		this.startTime = Date.now();
-	}
-	
-	getTimeDiff() {
-		return Date.now() - this.startTime;
+		this.time = 0;
+		this.prevTime = Date.now();
 	}
 	
 	render(cont, guiCont, guiRef) {
 		if (guiRef) {
-			guiCont.addChild(makeTimer(Math.floor(this.getTimeDiff() / 1000)));
+			guiCont.addChild(makeTimer(Math.floor(this.time/1000.0)));
 		}
 	}
 	
-	update() {}
+	update() {
+		let newTime = Date.now();
+		if (newTime - this.prevTime < 1000) {
+			this.time += (newTime - this.prevTime);
+		}
+		this.prevTime = newTime;
+	}
 }
 
 class ConstantWave {
@@ -1921,7 +1924,7 @@ function gameLoop(delta){
 			app.stage.removeChild(worldCont);
 			app.stage.addChild(menuCont);
 			worldCont.destroy();
-			lastScore = Math.floor(world.timer.getTimeDiff() / 1000)
+			lastScore = Math.floor(world.timer.time / 1000)
 			scoreCont = new PIXI.Container()
 			menuCont.addChildAt(scoreCont, 1);
 			let style = new PIXI.TextStyle({
